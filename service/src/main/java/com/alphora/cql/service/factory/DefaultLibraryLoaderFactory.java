@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -56,6 +57,10 @@ public class DefaultLibraryLoaderFactory implements LibraryLoaderFactory {
         Path directoryPath = Paths.get(path);
         File directory = new File(directoryPath.toAbsolutePath().toString());
         File[] files = directory.listFiles((d, name) -> name.endsWith(".cql"));
+
+        if (files == null || files.length == 0) {
+            return Collections.emptyList();
+        }
 
         return Arrays.asList(files).stream().map(x -> x.toPath()).filter(Files::isRegularFile).map(t -> {
             try {

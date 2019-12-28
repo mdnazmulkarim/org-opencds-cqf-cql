@@ -24,11 +24,11 @@
                 "--ln", 
                 "EXM124_FHIR3", 
                 "-m", 
-                "FHIR=../connectathon/fhir3/tests/EXM124_FHIR3-7.2.000", 
+                "FHIR:3.0.0=../connectathon/fhir3/tests/EXM124_FHIR3-7.2.000", 
                 "-t", 
                 "http://cqm-sandbox.alphora.com/cqf-ruler-dstu3/fhir", 
                 "-c", 
-                "Patient=denom-cms124-stu3"
+                "Patient=denom-EXM124-FHIR3"
             ]
         },
         {
@@ -39,15 +39,38 @@
             "projectName": "cli",
             "args": [
                 "--lp", 
-                "../connectathon/cql/FHIR-3.0.0", 
+                "../connectathon/fhir3/cql", 
                 "--ln", 
                 "EXM130_FHIR3", 
                 "-m", 
-                "FHIR=../connectathon/fhir3/tests/EXM130_FHIR3-7.2.000", 
+                "FHIR:3.0.0=../connectathon/fhir3/tests/EXM130_FHIR3-7.2.000", 
                 "-t", 
                 "../connectathon/fhir3/resources/valuesets", 
                 "-c", 
-                "Patient=numer-cms130-stu3"
+                "Patient=numer-EXM130-FHIR3"
+            ]
+        },
+        {
+            "type": "java",
+            "name": "Debug (EXM 130 Measure)",
+            "request": "launch",
+            "mainClass": "com.alphora.cql.cli.Main",
+            "projectName": "cli",
+            "args": [
+                "--lp", 
+                "../connectathon/fhir3/cql", 
+                "--mn", 
+                "EXM130_FHIR3", 
+                "--mv",
+                "7.2.000",
+                "--mp",
+                "../connectathon/fhir3/resources/measure",
+                "-m", 
+                "FHIR:3.0.0=../connectathon/fhir3/tests/EXM130_FHIR3-7.2.000", 
+                "-t", 
+                "../connectathon/fhir3/resources/valuesets", 
+                "-c", 
+                "Patient=numer-EXM130-FHIR3"
             ]
         },
         {
@@ -62,7 +85,7 @@
                 "--ln", 
                 "EXM104_FHIR3", 
                 "-m", 
-                "FHIR=http://cqm-sandbox.alphora.com/cqf-ruler-dstu3/fhir", 
+                "FHIR:3.0.0=http://cqm-sandbox.alphora.com/cqf-ruler-dstu3/fhir", 
                 "-t", 
                 "../connectathon/fhir3/resources/valuesets", 
                 "-c", 

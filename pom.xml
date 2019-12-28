@@ -20,9 +20,9 @@
 
     <modules>
         <module>service</module>
-        <module>cli</module>
-        <module>rest</module>
         <module>measure</module>
+        <module>rest</module>
+        <module>cli</module>
     </modules>
 
     <repositories>

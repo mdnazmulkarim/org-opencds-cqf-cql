@@ -20,14 +20,14 @@ import org.opencds.cqf.cql.runtime.Interval;
 public class R4MeasureEvaluation<RT, ST extends RT> extends
         MeasureEvaluation<Measure, Measure.MeasureGroupComponent, Measure.MeasureGroupPopulationComponent, MeasureReport, MeasureReport.MeasureReportGroupComponent, MeasureReport.MeasureReportGroupPopulationComponent, RT, ST> {
 
-    public R4MeasureEvaluation(Context context, Measure measure, Interval measurementPeriod, String packageName,
+    public R4MeasureEvaluation(Context context, Measure measure, String packageName,
             Function<RT, String> getId, String patientOrPractitionerId) {
-        super(context, measure, measurementPeriod, packageName, getId, patientOrPractitionerId);
+        super(context, measure, packageName, getId, patientOrPractitionerId);
     }
 
-    public R4MeasureEvaluation(Context context, Measure measure, Interval measurementPeriod, String packageName,
+    public R4MeasureEvaluation(Context context, Measure measure, String packageName,
     Function<RT, String> getId) {
-        super(context, measure, measurementPeriod, packageName, getId);
+        super(context, measure, packageName, getId);
     }
 
     @Override

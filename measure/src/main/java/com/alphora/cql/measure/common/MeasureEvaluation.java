@@ -37,15 +37,15 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
     protected abstract void addReportGroup(MeasureReportT report, MeasureReportGroupComponentT group);
 
     // TODO: Get the intervat from the 
-    public MeasureEvaluation(Context context, MeasureT measure, Interval measurementPeriod, String packageName, Function<ResourceT, String> getId) {
-        this(context, measure, measurementPeriod, packageName, getId, null);
+    public MeasureEvaluation(Context context, MeasureT measure, String packageName, Function<ResourceT, String> getId) {
+        this(context, measure, packageName, getId, null);
     }
 
-    public MeasureEvaluation(Context context, MeasureT measure, Interval measurementPeriod, String packageName, Function<ResourceT, String> getId, String patientOrPractitionerId) {
+    public MeasureEvaluation(Context context, MeasureT measure, String packageName, Function<ResourceT, String> getId, String patientOrPractitionerId) {
         this.measure = measure;
         this.context = context;
         this.subjectOrPractitionerId = patientOrPractitionerId;
-        this.measurementPeriod = measurementPeriod;
+
         this.getId = getId;
         this.packageName = packageName;
     }
@@ -182,7 +182,8 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
 
     private MeasureReportT evaluate(List<SubjectT> patients, MeasureReportType type)
     {
-        MeasureReportT report = this.createMeasureReport("complete", type, this.measurementPeriod, patients);
+        Interval measurementPeriod = (Interval)this.context.resolveParameterRef(null, "Measurement Period");
+        MeasureReportT report = this.createMeasureReport("complete", type, measurementPeriod, patients);
         HashMap<String,ResourceT> resources = new HashMap<>();
         HashMap<String,HashSet<String>> codeToResourceMap = new HashMap<>();
 

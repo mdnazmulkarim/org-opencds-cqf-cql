@@ -1,6 +1,5 @@
 package com.alphora.cql.service;
 
-import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -9,17 +8,10 @@ import java.util.Map;
 import java.util.Set;
 
 import com.alphora.cql.service.factory.DataProviderFactory;
-import com.alphora.cql.service.factory.DefaultDataProviderFactory;
-import com.alphora.cql.service.factory.DefaultLibraryLoaderFactory;
-import com.alphora.cql.service.factory.DefaultTerminologyProviderFactory;
-import com.alphora.cql.service.factory.LibraryLoaderFactory;
 import com.alphora.cql.service.factory.TerminologyProviderFactory;
-import com.alphora.cql.service.resolver.DefaultParameterResolver;
 import com.alphora.cql.service.resolver.ParameterResolver;
-import com.alphora.cql.service.serialization.EvaluationResultsSerializer;
 
 import org.apache.commons.lang3.tuple.Pair;
-import org.cqframework.cql.cql2elm.CqlTranslator;
 import org.cqframework.cql.elm.execution.Library;
 import org.cqframework.cql.elm.execution.UsingDef;
 import org.cqframework.cql.elm.execution.VersionedIdentifier;
@@ -27,200 +19,40 @@ import org.opencds.cqf.cql.data.DataProvider;
 import org.opencds.cqf.cql.execution.CqlEngine;
 import org.opencds.cqf.cql.execution.EvaluationResult;
 import org.opencds.cqf.cql.execution.LibraryLoader;
+import org.opencds.cqf.cql.execution.CqlEngine.Options;
 import org.opencds.cqf.cql.terminology.TerminologyProvider;
 
 public class Service {
 
-    public enum Options {
-        EnableFileUri
-    }
-
-    private EnumSet<Options> options;
-    private EnumSet<org.opencds.cqf.cql.execution.CqlEngine.Options> engineOptions;
-    private EnumSet<CqlTranslator.Options> translatorOptions;
-    private TerminologyProviderFactory terminologyProviderFactory;
-    private DataProviderFactory dataProviderFactory;
-    private LibraryLoaderFactory libraryLoaderFactory;
+    // TODO: The parameter resolver will eventually use meta-data from the libraries
+    // in order to construct / validate the execution parameters (For example, knowing
+    // that the parameter type is a FHIR resource, so it needs to use a FHIR deserializer
+    // to correctly instantiate the parameter as an object.
     private ParameterResolver parameterResolver;
+    private LibraryLoader libraryLoader;
+    private EnumSet<Options> engineOptions;
 
-    // Use this as a quick way to enable file uris.
-    public Service(EnumSet<Options> options) {
-        this(null, null, null, null, options, null, null);
-    }
+    private Map<String, DataProvider> dataProviders;
+    private TerminologyProvider terminologyProvider;
 
-    public Service(LibraryLoaderFactory libraryLoaderFactory, DataProviderFactory dataProviderFactory,
-            TerminologyProviderFactory terminologyProviderFactory, ParameterResolver parameterResolver,
-            EnumSet<Options> options,
-            EnumSet<org.opencds.cqf.cql.execution.CqlEngine.Options> engineOptions,
-            EnumSet<CqlTranslator.Options> translatorOptions) {
-
-        if (libraryLoaderFactory == null) {
-            libraryLoaderFactory = new DefaultLibraryLoaderFactory();
-        }
-
-        if (dataProviderFactory == null) {
-            dataProviderFactory = new DefaultDataProviderFactory();
-        }
-
-        if (terminologyProviderFactory == null) {
-            terminologyProviderFactory = new DefaultTerminologyProviderFactory();
-        }
-
-        if (parameterResolver == null) {
-           parameterResolver = new DefaultParameterResolver();
-        }
-
-        if (engineOptions == null) {
-            engineOptions = EnumSet.of(org.opencds.cqf.cql.execution.CqlEngine.Options.EnableExpressionCaching);
-        }
-
-        if (options == null) {
-            options = EnumSet.noneOf(Options.class);
-        }
-
-        if (translatorOptions == null) {
-            // Default for measure eval
-            translatorOptions =  EnumSet.of(
-                CqlTranslator.Options.EnableAnnotations,
-                CqlTranslator.Options.EnableLocators,
-                CqlTranslator.Options.DisableListDemotion,
-                CqlTranslator.Options.DisableListPromotion,
-                CqlTranslator.Options.DisableMethodInvocation);
-        }
-
-        this.libraryLoaderFactory = libraryLoaderFactory;
-        this.dataProviderFactory = dataProviderFactory;
-        this.terminologyProviderFactory = terminologyProviderFactory;
+    public Service(LibraryLoader libraryLoader,  Map<String, DataProvider> dataProviders, TerminologyProvider terminologyProvider, 
+        ParameterResolver parameterResolver, EnumSet<Options> engineOptions) {
         this.parameterResolver = parameterResolver;
-        this.options = options;
+        this.libraryLoader = libraryLoader;
+        this.dataProviders = dataProviders;
+        this.terminologyProvider = terminologyProvider;
         this.engineOptions = engineOptions;
-        this.translatorOptions = translatorOptions;
     }
 
-    public Response evaluate(Parameters parameters) {
-        validateParameters(parameters);
-
-        LibraryLoader libraryLoader = null;
-        if (parameters.libraryPath != null && !parameters.libraryPath.isEmpty()) {
-            libraryLoader = this.libraryLoaderFactory.create(parameters.libraryPath, this.translatorOptions);
-        }
-        else {
-            libraryLoader = this.libraryLoaderFactory.create(parameters.libraries, this.translatorOptions);
+    private void validateParameters(EvaluationParameters parameters) {
+        if (parameters.libraryName == null && (parameters.expressions == null || parameters.expressions.isEmpty())) {
+            throw new IllegalArgumentException("libraryName or expressions must be specified.");
         }
 
-        Map<VersionedIdentifier, Set<String>> expressions = this.toExpressionMap(parameters.expressions);
-        Map<VersionedIdentifier, Map<String, String>> evaluationParameters = this.toParameterMap(parameters.parameters);
-
-        // TOOD: Recursive resolve ALL libraries, not just those that are used by parameters, expressions, and library name.
-        // Either that or have the library manager just give them all to us.
-
-        Map<VersionedIdentifier, Library> libraries = new HashMap<VersionedIdentifier, Library>();
-        if (parameters.libraryName != null) {
-            Library lib = libraryLoader.load(toExecutionIdentifier(parameters.libraryName, parameters.libraryVersion));
-            if (lib != null) {
-                libraries.put(lib.getIdentifier(), lib);
-            }
+        if (parameters.libraryName != null && (parameters.expressions != null && !parameters.expressions.isEmpty())) {
+            throw new IllegalArgumentException("libraryName and expressions are mutually exclusive. Only specify one.");
         }
-
-        for (VersionedIdentifier v : expressions.keySet()) {
-            Library lib = libraryLoader.load(v);
-            if (lib != null && !libraries.containsKey(lib.getIdentifier())) {
-                libraries.put(lib.getIdentifier(), lib);
-            }
-        }
-
-        for (VersionedIdentifier v : evaluationParameters.keySet()) {
-            Library lib = libraryLoader.load(v);
-            if (lib != null && !libraries.containsKey(lib.getIdentifier())) {
-                libraries.put(lib.getIdentifier(), lib);
-            }
-        }
-
-        Map<String, Pair<String, String>> modelVersionAndUrls = getModelVersionAndUrls(libraries, parameters.modelUris);
-        TerminologyProvider terminologyProvider = this.terminologyProviderFactory.create(modelVersionAndUrls, parameters.terminologyUri);
-        Map<String, DataProvider> dataProviders = this.dataProviderFactory.create(modelVersionAndUrls, terminologyProvider);
-
-        Map<String, Object> resolvedContextParameters = this.parameterResolver.resolvecontextParameters(parameters.contextParameters);
-        Map<VersionedIdentifier, Map<String, Object>> resolvedEvaluationParameters = this.parameterResolver.resolveParameters(libraries, evaluationParameters);
-
-        CqlEngine engine = new CqlEngine(libraryLoader, dataProviders, terminologyProvider, this.engineOptions);
-
-        EvaluationResult result = null;
-        if (parameters.libraryName != null) {
-            result = engine.evaluate(resolvedContextParameters, resolvedEvaluationParameters,
-                    this.toExecutionIdentifier(parameters.libraryName, null));
-        } else {
-            result = engine.evaluate(resolvedContextParameters, resolvedEvaluationParameters, expressions);
-        }
-
-        Response response = new Response();
-        response.evaluationResult = result;
-
-        // TODO: Non-static serializers for different models.
-        Pair<String, String> versionAndUrl = modelVersionAndUrls.get("FHIR");
-        if (versionAndUrl != null) {
-            EvaluationResultsSerializer.setFhirContext(versionAndUrl.getLeft());
-        }
-
-        return response;
     }
-
-    private Map<String, Pair<String, String>> getModelVersionAndUrls(Map<VersionedIdentifier, Library> libraries,
-        Map<String, String> modelUris) {
-        final Map<String, String> shorthandMap = new HashMap<String, String>() {
-            {
-                put("FHIR", "http://hl7.org/fhir");
-                put("QUICK", "http://hl7.org/fhir");
-                put("QDM", "urn:healthit-gov:qdm:v5_4");
-            }
-        };
-
-        Map<String, Pair<String, String>> versions = new HashMap<>();
-        for (Map.Entry<String, String> modelUri : modelUris.entrySet()) {
-            String uri = shorthandMap.containsKey(modelUri.getKey()) ? shorthandMap.get(modelUri.getKey())
-                    : modelUri.getKey();
-
-            String version = null;
-            for (Library library : libraries.values()) {
-                if (version != null) {
-                    break;
-                }
-
-                if (library.getUsings() != null && library.getUsings().getDef() != null) {
-                    for (UsingDef u : library.getUsings().getDef()) {
-                        if (u.getUri().equals(uri)) {
-                            version = u.getVersion();
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (version == null) {
-                throw new IllegalArgumentException(
-                        String.format("A uri was specified for %s but is not used.", modelUri.getKey()));
-            }
-
-            if (versions.containsKey(uri)) {
-                if (!versions.get(uri).getKey().equals(version)) {
-                    throw new IllegalArgumentException(String.format(
-                            "Libraries are using multiple versions of %s. Only one version is supported at a time.",
-                            modelUri.getKey()));
-                }
-
-            } else {
-                versions.put(uri, Pair.of(version, modelUri.getValue()));
-            }
-
-        }
-
-        return versions;
-    }
-
-    public VersionedIdentifier toExecutionIdentifier(String name, String version) {
-        return new VersionedIdentifier().withId(name).withVersion(version);
-    }
-
 
     private Map<VersionedIdentifier, Set<String>> toExpressionMap(List<Pair<String, String>> expressions) {
         Map<VersionedIdentifier, Set<String>> map = new HashMap<>();
@@ -250,36 +82,53 @@ public class Service {
         return map;
     }
 
-    private void ensureNotFileUri(String uri) {
-        if (Helpers.isFileUri(uri)) {
-            throw new IllegalArgumentException(String.format("%s is not a valid uri", uri));
+    public Response evaluate(EvaluationParameters params) {
+        validateParameters(params);
+
+        Map<VersionedIdentifier, Library> libraries = new HashMap<VersionedIdentifier, Library>();
+        if (params.libraryName != null) {
+            Library lib = libraryLoader.load(toExecutionIdentifier(params.libraryName, params.libraryVersion));
+            if (lib != null) {
+                libraries.put(lib.getIdentifier(), lib);
+            }
         }
+
+        Map<String, Object> resolvedContextParameters = this.parameterResolver.resolvecontextParameters(params.contextParameters);
+        Map<VersionedIdentifier, Map<String, String>> libraryParameters = this.toParameterMap(params.parameters);
+
+        Map<VersionedIdentifier, Set<String>> expressions = this.toExpressionMap(params.expressions);
+        for (VersionedIdentifier v : expressions.keySet()) {
+            Library lib = libraryLoader.load(v);
+            if (lib != null && !libraries.containsKey(lib.getIdentifier())) {
+                libraries.put(lib.getIdentifier(), lib);
+            }
+        }
+
+        for (VersionedIdentifier v : libraryParameters.keySet()) {
+            Library lib = libraryLoader.load(v);
+            if (lib != null && !libraries.containsKey(lib.getIdentifier())) {
+                libraries.put(lib.getIdentifier(), lib);
+            }
+        }
+
+        Map<VersionedIdentifier, Map<String, Object>> resolvedEvaluationParameters = this.parameterResolver.resolveParameters(libraries, libraryParameters);
+        CqlEngine engine = new CqlEngine(this.libraryLoader, dataProviders, terminologyProvider, this.engineOptions);
+
+        EvaluationResult result = null;
+        if (params.libraryName != null) {
+            result = engine.evaluate(resolvedContextParameters, resolvedEvaluationParameters,
+                    this.toExecutionIdentifier(params.libraryName, null));
+        } else {
+            result = engine.evaluate(resolvedContextParameters, resolvedEvaluationParameters, expressions);
+        }
+
+        Response response = new Response();
+        response.evaluationResult = result;
+
+        return response;
     }
 
-    private void ensureNotFileUri(Collection<String> uris) {
-        for (String s : uris) {
-            ensureNotFileUri(s);
-        }
-    }
-
-    private void validateParameters(Parameters parameters) {
-          // Ensure EnableFileURI option is respected. This is a potential security risk on a public server, so this must remain implemented.
-          if (!this.options.contains(Options.EnableFileUri)) {
-            ensureNotFileUri(parameters.libraryPath);
-            ensureNotFileUri(parameters.terminologyUri);
-            ensureNotFileUri(parameters.modelUris.values());
-        }
-
-        if (parameters.libraryName == null && (parameters.expressions == null || parameters.expressions.isEmpty())) {
-            throw new IllegalArgumentException("libraryName or expressions must be specified.");
-        }
-
-        if (parameters.libraryName != null && (parameters.expressions != null && !parameters.expressions.isEmpty())) {
-            throw new IllegalArgumentException("libraryName and expressions are mutually exclusive. Only specify one.");
-        }
-
-        if ((parameters.libraries != null && !parameters.libraries.isEmpty()) && (parameters.libraryPath != null && !parameters.libraryPath.isEmpty())) {
-            throw new IllegalArgumentException("libraries and library path are mutually exclusive. Only specify one.");
-        }
+    public VersionedIdentifier toExecutionIdentifier(String name, String version) {
+        return new VersionedIdentifier().withId(name).withVersion(version);
     }
 }

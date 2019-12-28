@@ -7,8 +7,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.alphora.cql.service.Parameters;
-
 import org.apache.commons.lang3.tuple.Pair;
 
 import joptsimple.OptionParser;
@@ -52,7 +50,7 @@ public class ArgumentProcessor {
 
         OptionSpecBuilder measurePathBuilder = parser.acceptsAll(asList(MEASURE_PATH_OPTIONS), "FHIR .json files expected.");
         OptionSpecBuilder measureNameBuilder = parser.acceptsAll(asList(MEASURE_NAME_OPTIONS), "Required if measure-path specified. Mutually exclusive with library-name.");
-        OptionSpecBuilder measureVersionBuilder = parser.acceptsAll(asList(LIBRARY_VERSION_OPTIONS), "If omitted most recent version of the measure will be used");  
+        OptionSpecBuilder measureVersionBuilder = parser.acceptsAll(asList(MEASURE_VERSION_OPTIONS), "If omitted most recent version of the measure will be used");  
         
         // Set up inter-depedencies.
         // Can't define libraries inline and in a directory
@@ -68,23 +66,23 @@ public class ArgumentProcessor {
         parser.mutuallyExclusive(measurePathBuilder, libraryBuilder);
 
         OptionSpec<String> library = libraryBuilder.withRequiredArg().describedAs("library content");
-        OptionSpec<String> libraryPath = libraryPathBuilder.requiredUnless("l", "mp", "mn").withRequiredArg().describedAs("input directory for libraries");
+        OptionSpec<String> libraryPath = libraryPathBuilder.requiredUnless("l").withRequiredArg().describedAs("input directory for libraries");
         OptionSpec<String> libraryName = libraryNameBuilder.withRequiredArg().describedAs("name of primary library");
         OptionSpec<String> libraryVersion = libraryVersionBuilder.availableIf(libraryName).withRequiredArg().describedAs("version of primary library");
         OptionSpec<String> expression = expressionBuilder.withRequiredArg().describedAs("expression to evaluate");
 
         OptionSpec<String> measureName = measureNameBuilder.withRequiredArg().describedAs("name of measure");
         OptionSpec<String> measureVersion = measureVersionBuilder.availableIf(measureName).withRequiredArg().describedAs("version of measure");
-        OptionSpec<String> measurePath = measurePathBuilder.requiredUnless("l", "lp", "ln").withRequiredArg().describedAs("input directory for measures");
+        OptionSpec<String> measurePath = measurePathBuilder.requiredUnless("l", "ln").withRequiredArg().describedAs("input directory for measures");
 
 
         // TODO: Terminology user / password (and other auth options)
         OptionSpec<String> terminologyUri = parser.acceptsAll(asList(TERMINOLOGY_URI_OPTIONS),"Supports FHIR-based terminology")
-            .withRequiredArg().describedAs("uri of terminology server");
+            .withRequiredArg().describedAs("uri of terminology server / path of terminology");
 
         // TODO: Data provider user/ password (and other auth options)
         OptionSpec<KeyValuePair> modelUri = parser.acceptsAll(asList(MODEL_OPTIONS), 
-            "Use the form model=uri. (e.g. FHIR=path/to/fhir/resources) Use multiple times to specify multiple models.")
+            "Use the form model:version=uri. (e.g. FHIR:3.0.0=path/to/fhir/resources) Use multiple times to specify multiple models.")
             .withRequiredArg().ofType(KeyValuePair.class).describedAs("path of data for model ");
 
         OptionSpec<KeyValuePair> parameter = parser.acceptsAll(asList(PARAMETER_OPTIONS), 
@@ -96,7 +94,7 @@ public class ArgumentProcessor {
             .withRequiredArg().ofType(KeyValuePair.class).describedAs("value of context parameter");
 
         OptionSpec<Boolean> verbose = parser.acceptsAll(asList(OUTPUT_FORMAT_OPTIONS), "Show simplified results")
-        .withOptionalArg().ofType(Boolean.class).describedAs("String representation of a boolean value");
+        .withOptionalArg().ofType(Boolean.class).describedAs("String representation of a boolean value").defaultsTo(false);
 
         OptionSpec<Void> help = parser.acceptsAll(asList(HELP_OPTIONS), "Show this help page").forHelp();
 
@@ -120,7 +118,7 @@ public class ArgumentProcessor {
         return options;
     }
 
-    public Parameters parseAndConvert(String[] args) {
+    public CliParameters parseAndConvert(String[] args) {
         OptionSet options = this.parse(args);
 
         List<String> libraries = (List<String>)options.valuesOf(LIBRARY_OPTIONS[0]);
@@ -145,19 +143,24 @@ public class ArgumentProcessor {
         List<KeyValuePair> parameters = (List<KeyValuePair>)options.valuesOf(PARAMETER_OPTIONS[0]);
         List<KeyValuePair> contextParameters = (List<KeyValuePair>)options.valuesOf(CONTEXT_PARAMETER_OPTIONS[0]);
 
-        Parameters ip = new Parameters();
-        ip.libraries = libraries;
-        ip.libraryPath = libraryPath;
-        ip.libraryName = libraryName;
-        ip.libraryVersion = libraryVersion;
-        ip.expressions = toListOfExpressions(expressions);
-        ip.terminologyUri = terminologyUri;
-        ip.modelUris = toMap("Model parameters", models);
-        ip.parameters = toParameterMap(parameters);
-        ip.contextParameters = toMap("Context Parameters", contextParameters);
-        ip.verbose = verbose;
+        CliParameters cp = new CliParameters();
+        cp.serviceParameters.libraries = libraries;
+        cp.serviceParameters.libraryPath = libraryPath;
+        cp.serviceParameters.terminologyUri = terminologyUri;
+        cp.serviceParameters.modelUris = toMap("Model Parameters", models);
+        cp.serviceParameters.verbose = verbose;
 
-        return ip;
+        cp.evaluationParameters.libraryName = libraryName;
+        cp.evaluationParameters.libraryVersion = libraryVersion;
+        cp.evaluationParameters.expressions = toListOfExpressions(expressions);
+        cp.evaluationParameters.parameters = toParameterMap(parameters);
+        cp.evaluationParameters.contextParameters = toMap("Context Parameters", contextParameters);
+
+        cp.measureParameters.measureName = measureName;
+        cp.measureParameters.measureVersion = measureVersion;
+        cp.measureParameters.measurePath = measurePath;
+
+        return cp;
 
     }
 
