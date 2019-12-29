@@ -1,14 +1,20 @@
 package com.alphora.cql.measure.common;
 
+import org.apache.commons.lang3.tuple.Pair;
+import org.cqframework.cql.elm.execution.VersionedIdentifier;
 import org.hl7.fhir.instance.model.api.IBase;
 import org.opencds.cqf.cql.data.DataProvider;
-import org.opencds.cqf.cql.execution.Context;
 import org.opencds.cqf.cql.runtime.Interval;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.function.Function;
+
+import com.alphora.cql.service.EvaluationParameters;
+import com.alphora.cql.service.Response;
+import com.alphora.cql.service.Service;
 
 public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupComponentT extends IBase, MeasureGroupPopulationComponentT extends IBase, MeasureReportT extends IBase, MeasureReportGroupComponentT extends IBase, MeasureReportGroupPopulationComponentT extends IBase, ResourceT, SubjectT extends ResourceT> {
 
@@ -16,12 +22,13 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
 
 
     protected MeasureT measure;
-    protected Context context;
-    protected String subjectOrPractitionerId;
-    protected Interval measurementPeriod;
+    protected Service service;
 
     // TODO: Figure this out dynamically based on the ResourceType
     protected String packageName;
+
+    protected Map<String, String> contextParameters;
+    protected Map<Pair<String, String>,String> parameters;
 
     protected Function<ResourceT, String> getId;
     protected abstract MeasureScoring getMeasureScoring();
@@ -35,19 +42,18 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
     protected abstract MeasureReportGroupComponentT createReportGroup(String id);
     protected abstract String getGroupId(MeasureGroupComponentT group);
     protected abstract void addReportGroup(MeasureReportT report, MeasureReportGroupComponentT group);
+    protected abstract VersionedIdentifier getPrimaryLibrary();
 
-    // TODO: Get the intervat from the 
-    public MeasureEvaluation(Context context, MeasureT measure, String packageName, Function<ResourceT, String> getId) {
-        this(context, measure, packageName, getId, null);
-    }
+    private List<Object> evaluatedResources;
 
-    public MeasureEvaluation(Context context, MeasureT measure, String packageName, Function<ResourceT, String> getId, String patientOrPractitionerId) {
+    public MeasureEvaluation(Service service, MeasureT measure, String packageName, Function<ResourceT, String> getId, Map<String, String> contextParameters, Map<Pair<String, String>,String> parameters) {
         this.measure = measure;
-        this.context = context;
-        this.subjectOrPractitionerId = patientOrPractitionerId;
-
+        this.service = service;
         this.getId = getId;
         this.packageName = packageName;
+        this.parameters = parameters;
+        this.contextParameters = contextParameters;
+        this.evaluatedResources = new ArrayList<>();
     }
 
     public MeasureReportT evaluate(MeasureReportType type) {
@@ -66,11 +72,13 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
     protected MeasureReportT evaluatePatientMeasure() {
         logger.info("Generating individual report");
 
-        if (this.subjectOrPractitionerId == null) {
+        String patientId = this.contextParameters.get("Patient");
+
+        if (patientId == null) {
             return evaluatePopulationMeasure();
         }
 
-        Iterable<Object> subjectRetrieve = this.getDataProvider().retrieve("Patient", "id", this.subjectOrPractitionerId, "Patient", null, null, null, null, null, null, null, null);
+        Iterable<Object> subjectRetrieve = this.getDataProvider().retrieve("Patient", "id", patientId, "Patient", null, null, null, null, null, null, null, null);
         SubjectT patient = null;
         if (subjectRetrieve.iterator().hasNext()) {
             patient = (SubjectT)subjectRetrieve.iterator().next();
@@ -81,15 +89,19 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
 
     protected MeasureReportT evaluateSubjectListMeasure()
     {
+        String practitionerId = this.contextParameters.get("Practitioner");
+
         logger.info("Generating subject-list report");
-        List<SubjectT> subjects = this.subjectOrPractitionerId == null ? getAllSubjects() : getPractitionerSubjects(this.subjectOrPractitionerId);
+        List<SubjectT> subjects = practitionerId == null ? getAllSubjects() : getPractitionerSubjects(practitionerId);
         return evaluate(subjects, MeasureReportType.SUBJECTLIST);
     }
 
     protected MeasureReportT evaluatePatientListMeasure()
     {
+        String practitionerId = this.contextParameters.get("Practitioner");
+        
         logger.info("Generating patient-list report");
-        List<SubjectT> subjects = this.subjectOrPractitionerId == null ? getAllSubjects() : getPractitionerSubjects(this.subjectOrPractitionerId);
+        List<SubjectT> subjects = practitionerId == null ? getAllSubjects() : getPractitionerSubjects(practitionerId);
         return evaluate(subjects, MeasureReportType.PATIENTLIST);
     }
 
@@ -101,7 +113,14 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
     }
 
     private DataProvider getDataProvider() {
-        return this.context.resolveDataProvider(this.packageName);
+        for (Entry<String, DataProvider> entry :this.service.getDataProviders().entrySet())
+        {
+            if (entry.getValue().getPackageName().equals(this.packageName)) {
+                return entry.getValue();
+            }
+        }
+
+        return null;
     }
 
     private List<SubjectT> getAllSubjects() {
@@ -123,8 +142,20 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
             return Collections.emptyList();
         }
 
-        context.setContextValue("Patient", this.getId.apply(subject));
-        Object result = context.resolveExpressionRef(criteriaExpression).evaluate(context);
+        VersionedIdentifier primaryLibrary = this.getPrimaryLibrary();
+
+        // TODO: This all feels hacky...
+        EvaluationParameters params = new EvaluationParameters();
+        params.parameters = this.parameters;
+        params.contextParameters = this.contextParameters;
+        params.contextParameters.put("Patient", this.getId.apply(subject));
+        params.expressions = new ArrayList<Pair<String, String>>();
+        params.expressions.add(Pair.of(primaryLibrary.getId(), criteriaExpression));
+
+        Response response = service.evaluate(params);
+
+        Object result = response.evaluationResult.forLibrary(this.getPrimaryLibrary()).forExpression(criteriaExpression);
+
         if (result == null) {
             Collections.emptyList();
         }
@@ -182,7 +213,11 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
 
     private MeasureReportT evaluate(List<SubjectT> patients, MeasureReportType type)
     {
-        Interval measurementPeriod = (Interval)this.context.resolveParameterRef(null, "Measurement Period");
+        // TODO: Parse Cql types?
+        // Get resolved parameters?
+        // Just pass in the measure interval?
+        Interval measurementPeriod = null;
+
         MeasureReportT report = this.createMeasureReport("complete", type, measurementPeriod, patients);
         HashMap<String,ResourceT> resources = new HashMap<>();
         HashMap<String,HashSet<String>> codeToResourceMap = new HashMap<>();
@@ -432,7 +467,7 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
     private void populateResourceMap(MeasurePopulationType type, HashMap<String, ResourceT> resources,
             HashMap<String,HashSet<String>> codeToResourceMap)
     {
-        if (this.context.getEvaluatedResources().isEmpty()) {
+        if (this.evaluatedResources.isEmpty()) {
             return;
         }
 
@@ -442,7 +477,7 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
 
         HashSet<String> codeHashSet = codeToResourceMap.get((type.toCode()));
 
-        for (Object o : this.context.getEvaluatedResources()) {
+        for (Object o : this.evaluatedResources) {
             try {
                 ResourceT r = (ResourceT)o;
                 String id = this.getId.apply(r);
@@ -457,6 +492,6 @@ public abstract class MeasureEvaluation<MeasureT extends IBase,  MeasureGroupCom
             catch(Exception e) {}
         }
 
-        this.context.clearEvaluatedResources();
+        this.evaluatedResources.clear();
     }
 }

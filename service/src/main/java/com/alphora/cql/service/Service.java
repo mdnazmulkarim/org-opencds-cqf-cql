@@ -44,6 +44,18 @@ public class Service {
         this.engineOptions = engineOptions;
     }
 
+    public Map<String, DataProvider> getDataProviders() {
+        return this.dataProviders;
+    }
+
+    public TerminologyProvider getTerminologyProvider() {
+        return this.terminologyProvider;
+    }
+
+    public ParameterResolver getParameterResolver() {
+        return this.parameterResolver;
+    }
+
     private void validateParameters(EvaluationParameters parameters) {
         if (parameters.libraryName == null && (parameters.expressions == null || parameters.expressions.isEmpty())) {
             throw new IllegalArgumentException("libraryName or expressions must be specified.");

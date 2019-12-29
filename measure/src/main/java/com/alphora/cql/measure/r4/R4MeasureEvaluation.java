@@ -2,6 +2,7 @@ package com.alphora.cql.measure.r4;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -9,25 +10,30 @@ import com.alphora.cql.measure.common.MeasureEvaluation;
 import com.alphora.cql.measure.common.MeasurePopulationType;
 import com.alphora.cql.measure.common.MeasureReportType;
 import com.alphora.cql.measure.common.MeasureScoring;
+import com.alphora.cql.service.Service;
 
+import org.cqframework.cql.elm.execution.VersionedIdentifier;
+import org.apache.commons.lang3.tuple.Pair;
 import org.hl7.fhir.r4.model.*;
 import org.hl7.fhir.r4.model.Measure.MeasureGroupComponent;
 import org.hl7.fhir.r4.model.Measure.MeasureGroupPopulationComponent;
 import org.hl7.fhir.r4.model.MeasureReport.MeasureReportGroupComponent;
-import org.opencds.cqf.cql.execution.Context;
 import org.opencds.cqf.cql.runtime.Interval;
 
 public class R4MeasureEvaluation<RT, ST extends RT> extends
         MeasureEvaluation<Measure, Measure.MeasureGroupComponent, Measure.MeasureGroupPopulationComponent, MeasureReport, MeasureReport.MeasureReportGroupComponent, MeasureReport.MeasureReportGroupPopulationComponent, RT, ST> {
 
-    public R4MeasureEvaluation(Context context, Measure measure, String packageName,
-            Function<RT, String> getId, String patientOrPractitionerId) {
-        super(context, measure, packageName, getId, patientOrPractitionerId);
+
+    public R4MeasureEvaluation(Service service, Measure measure, String packageName,
+    Function<RT, String> getId, Map<String, String> contextParameters, Map<Pair<String, String>,String> parameters) {
+        super(service, measure, packageName, getId, contextParameters, parameters);
     }
 
-    public R4MeasureEvaluation(Context context, Measure measure, String packageName,
-    Function<RT, String> getId) {
-        super(context, measure, packageName, getId);
+    @Override
+    protected VersionedIdentifier getPrimaryLibrary() {
+        CanonicalType ct = this.measure.getLibrary().get(0);
+        String id = ct.getId().replace("-", "_").replace("Library/library_", "").replaceFirst("_[\\.\\d]+", "");
+        return new VersionedIdentifier().withId(id);
     }
 
     @Override
@@ -97,10 +103,12 @@ public class R4MeasureEvaluation<RT, ST extends RT> extends
             report.setSubject(new Reference(this.getId.apply(subjects.get(0))));
         }
 
-        report.setPeriod(
-            new Period()
-                    .setStart((Date) measurementPeriod.getStart())
-                    .setEnd((Date) measurementPeriod.getEnd()));
+        if (measurementPeriod != null) {
+            report.setPeriod(
+                new Period()
+                        .setStart((Date) measurementPeriod.getStart())
+                        .setEnd((Date) measurementPeriod.getEnd()));
+        }
 
         return report;
     }

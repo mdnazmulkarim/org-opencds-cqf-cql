@@ -2,6 +2,7 @@ package com.alphora.cql.measure.stu3;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -9,26 +10,31 @@ import com.alphora.cql.measure.common.MeasureEvaluation;
 import com.alphora.cql.measure.common.MeasurePopulationType;
 import com.alphora.cql.measure.common.MeasureReportType;
 import com.alphora.cql.measure.common.MeasureScoring;
+import com.alphora.cql.service.Service;
 
+import org.apache.commons.lang3.tuple.Pair;
+import org.cqframework.cql.elm.execution.VersionedIdentifier;
 import org.hl7.fhir.dstu3.model.*;
 import org.hl7.fhir.dstu3.model.Measure.MeasureGroupComponent;
 import org.hl7.fhir.dstu3.model.Measure.MeasureGroupPopulationComponent;
 import org.hl7.fhir.dstu3.model.MeasureReport.MeasureReportGroupComponent;
-import org.opencds.cqf.cql.execution.Context;
 import org.opencds.cqf.cql.runtime.Interval;
 
 public class Stu3MeasureEvaluation<RT, ST extends RT> extends
         MeasureEvaluation<Measure, Measure.MeasureGroupComponent, Measure.MeasureGroupPopulationComponent, MeasureReport, MeasureReport.MeasureReportGroupComponent, MeasureReport.MeasureReportGroupPopulationComponent, RT, ST> {
 
-    public Stu3MeasureEvaluation(Context context, Measure measure, String packageName,
-            Function<RT, String> getId, String patientOrPractitionerId) {
-        super(context, measure, packageName, getId, patientOrPractitionerId);
+    public Stu3MeasureEvaluation(Service service, Measure measure, String packageName,
+     Function<RT, String> getId, Map<String, String> contextParameters, Map<Pair<String, String>,String> parameters) {
+        super(service, measure, packageName, getId, contextParameters, parameters);
     }
 
-    public Stu3MeasureEvaluation(Context context, Measure measure, String packageName,
-    Function<RT, String> getId) {
-        super(context, measure, packageName, getId);
-    }
+    @Override
+	protected VersionedIdentifier getPrimaryLibrary() {
+        Reference ref = this.measure.getLibraryFirstRep();
+        // Convert Id to Name.
+        String id = ref.getReference().replace("-", "_").replace("Library/library_", "").replaceFirst("_[\\.\\d]+", "");
+        return new VersionedIdentifier().withId(id);
+	}
 
     @Override
     protected MeasureScoring getMeasureScoring() {
@@ -97,10 +103,12 @@ public class Stu3MeasureEvaluation<RT, ST extends RT> extends
             report.setPatient(new Reference(this.getId.apply(subjects.get(0))));
         }
 
-        report.setPeriod(
-            new Period()
-                    .setStart((Date) measurementPeriod.getStart())
-                    .setEnd((Date) measurementPeriod.getEnd()));
+        if (measurementPeriod != null) {
+            report.setPeriod(
+                new Period()
+                        .setStart((Date) measurementPeriod.getStart())
+                        .setEnd((Date) measurementPeriod.getEnd()));
+        }
 
         return report;
     }
@@ -122,6 +130,4 @@ public class Stu3MeasureEvaluation<RT, ST extends RT> extends
     protected void addReportGroup(MeasureReport report, MeasureReportGroupComponent group) {
         report.addGroup(group);
     }
-
-
 }

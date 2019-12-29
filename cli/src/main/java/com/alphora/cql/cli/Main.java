@@ -68,17 +68,19 @@ public class Main {
         // Set up 
         if (measure instanceof org.hl7.fhir.dstu3.model.Measure) {
             evaluation = new Stu3MeasureEvaluation<org.hl7.fhir.dstu3.model.Resource, org.hl7.fhir.dstu3.model.Patient>(
-                null, (org.hl7.fhir.dstu3.model.Measure)measure,  null, "org.hl7.fhir.dstu3.model", (x -> x.getIdElement().getIdPart()));
+                service, (org.hl7.fhir.dstu3.model.Measure)measure, "org.hl7.fhir.dstu3.model", (x -> x.getIdElement().getIdPart()),
+                evaluationParameters.contextParameters, evaluationParameters.parameters);
 
-            IBase report = evaluation.evaluate(MeasureReportType.SUBJECTLIST);
-            System.out.println(FhirContext.forDstu3().newJsonParser().encodeResourceToString((IBaseResource)report));
+            IBase report = evaluation.evaluate(MeasureReportType.PATIENTLIST);
+            System.out.println(FhirContext.forDstu3().newJsonParser().setPrettyPrint(true).encodeResourceToString((IBaseResource)report));
         }
         else {
             evaluation = new R4MeasureEvaluation<org.hl7.fhir.r4.model.Resource, org.hl7.fhir.r4.model.Patient>(
-                null, (org.hl7.fhir.r4.model.Measure)measure, null, "org.hl7.fhir.r4.model", (x -> x.getIdElement().getIdPart()));
+                service, (org.hl7.fhir.r4.model.Measure)measure, "org.hl7.fhir.r4.model", (x -> x.getIdElement().getIdPart()),
+                evaluationParameters.contextParameters, evaluationParameters.parameters);
 
             IBase report = evaluation.evaluate(MeasureReportType.SUBJECTLIST);
-            System.out.println(FhirContext.forDstu3().newJsonParser().encodeResourceToString((IBaseResource)report));
+            System.out.println(FhirContext.forDstu3().newJsonParser().setPrettyPrint(true).encodeResourceToString((IBaseResource)report));
         }
     }
 

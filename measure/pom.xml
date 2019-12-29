@@ -16,6 +16,11 @@
 
     <dependencies>
         <dependency>
+       <groupId>com.alphora.cql</groupId>
+        <artifactId>service</artifactId>
+        <version>${revision}</version>
+        </dependency>
+        <dependency>
             <groupId>org.opencds.cqf</groupId>
             <artifactId>cql-engine</artifactId>
         </dependency>
