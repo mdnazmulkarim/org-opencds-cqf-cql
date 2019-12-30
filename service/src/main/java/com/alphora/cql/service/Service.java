@@ -68,6 +68,10 @@ public class Service {
 
     private Map<VersionedIdentifier, Set<String>> toExpressionMap(List<Pair<String, String>> expressions) {
         Map<VersionedIdentifier, Set<String>> map = new HashMap<>();
+        if (expressions == null) {
+            return map;
+        }
+        
         for (Pair<String, String> p : expressions) {
             VersionedIdentifier vi = toExecutionIdentifier(p.getLeft(), null);
             if (!map.containsKey(vi)) {
@@ -82,6 +86,10 @@ public class Service {
 
     private Map<VersionedIdentifier, Map<String, String>> toParameterMap(Map<Pair<String, String>,String> parameters) {
         Map<VersionedIdentifier, Map<String, String>> map = new HashMap<>();
+        if (parameters == null) {
+            return map;
+        }
+
         for (Map.Entry<Pair<String, String>, String> p : parameters.entrySet()) {
             VersionedIdentifier vi = toExecutionIdentifier(p.getKey().getLeft(), null);
             if (!map.containsKey(vi)) {

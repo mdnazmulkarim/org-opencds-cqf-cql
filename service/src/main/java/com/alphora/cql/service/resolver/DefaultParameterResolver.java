@@ -1,5 +1,6 @@
 package com.alphora.cql.service.resolver;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -9,12 +10,15 @@ import org.cqframework.cql.elm.execution.VersionedIdentifier;
 
 public class DefaultParameterResolver implements ParameterResolver {
     public Map<String, Object>  resolvecontextParameters(Map<String, String> parameters) {
+        if (parameters == null) {
+            return new HashMap<>();
+        }
         return parameters.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), y -> (Object)y.getValue()));
     }
     
     public Map<VersionedIdentifier, Map<String, Object>> resolveParameters(Map<VersionedIdentifier, Library> libraries, Map<VersionedIdentifier, Map<String, String>> parameters) {
         // TODO: Model specific paramters
-        if (!parameters.isEmpty()) {
+        if (parameters != null && !parameters.isEmpty()) {
             throw new NotImplementedException("Parameters are not yet implemented.");
         }
 

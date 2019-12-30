@@ -43,6 +43,11 @@ public class ServiceFactory {
     private LibraryLoaderFactory libraryLoaderFactory;
     private ParameterResolver parameterResolver;
 
+        // Use this as a quick way to enable file uris.
+        public ServiceFactory() {
+            this(null, null, null, null, EnumSet.noneOf(Options.class), null, null);
+        }
+
     // Use this as a quick way to enable file uris.
     public ServiceFactory(EnumSet<Options> options) {
         this(null, null, null, null, options, null, null);
@@ -131,14 +136,22 @@ public class ServiceFactory {
     private void validateParameters(ServiceParameters parameters) {
         // Ensure EnableFileURI option is respected. This is a potential security risk on a public server, so this must remain implemented.
         if (!this.options.contains(Options.EnableFileUri)) {
-          ensureNotFileUri(parameters.libraryPath);
-          ensureNotFileUri(parameters.terminologyUri);
-          ensureNotFileUri(parameters.modelUris.values());
-      }
+            if (parameters.libraryPath != null) {
+                ensureNotFileUri(parameters.libraryPath);
+            }
 
-      if ((parameters.libraries != null && !parameters.libraries.isEmpty()) && (parameters.libraryPath != null && !parameters.libraryPath.isEmpty())) {
-          throw new IllegalArgumentException("libraries and library path are mutually exclusive. Only specify one.");
-      }
+            if (parameters.terminologyUri != null) {
+                ensureNotFileUri(parameters.terminologyUri);
+            }
+
+            if (parameters.modelUris != null) {
+                ensureNotFileUri(parameters.modelUris.values());
+            }
+        }
+
+        if ((parameters.libraries != null && !parameters.libraries.isEmpty()) && (parameters.libraryPath != null && !parameters.libraryPath.isEmpty())) {
+            throw new IllegalArgumentException("libraries and library path are mutually exclusive. Only specify one.");
+        }
     }
 
     private Map<String, Pair<String, String>> getModelVersionAndUrls(Map<String, String> modelUris) {
@@ -149,6 +162,10 @@ public class ServiceFactory {
                 put("QDM", "urn:healthit-gov:qdm:v5_4");
             }
         };
+
+        if (modelUris == null) {
+            return new HashMap<>();
+        }
 
         Map<String, Pair<String, String>> versions = new HashMap<>();
         for (Map.Entry<String, String> modelUri : modelUris.entrySet()) {
